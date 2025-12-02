@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Infinite Bingo Layers v3 (Fixed)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --accent-color: #4da6ff;
+            --border-color: #444;
+            --hit-color: #2e7d32;
+            --hit-text: #fff;
+            --reset-button-color: #ff9900;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .column {
+            flex: 1;
+            padding: 15px;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .column:last-child {
+            border-right: none;
+        }
+
+        h1,
+        h2 {
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 5px;
+            margin-top: 0;
+            font-size: 16px;
+            color: var(--accent-color);
+        }
+
+        .stat-row {
+            margin-bottom: 15px;
+        }
+
+        .stat-val {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .sub-val {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        #game-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #current-ball {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            height: 60px;
+        }
+
+        #bingo-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+            max-height: 50vh;
+            padding-right: 5px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .bingo-card {
+            display: grid;
+            gap: 4px;
+            background: #222;
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            flex-shrink: 0;
+        }
+
+        .cell {
+            width: 40px;
+            height: 40px;
+            background: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            border-radius: 2px;
+            transition: transform 0.1s;
+        }
+
+        .cell.hit {
+            background-color: var(--hit-color);
+            color: var(--hit-text);
+        }
+
+        .cell.free {
+            background-color: var(--accent-color);
+            font-size: 10px;
+        }
+
+        .cell.reach {
+            background-color: #ff9800;
+            /* Orange */
+            color: #fff;
+        }
+
+        .cell.bingo-completed {
+            background-color: var(--accent-color) !important;
+            color: #fff;
+        }
+
+        button {
+            background: #2a2a2a;
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            transition: all 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            background: #3a3a3a;
+            border-color: var(--accent-color);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .cost {
+            float: right;
+            color: #ff9999;
+        }
+
+        .lvl {
+            color: var(--accent-color);
+            font-size: 0.9em;
+            margin-right: 5px;
+        }
+
+        #btn-manual-draw {
+            background-color: #383838;
+            border-color: #555;
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        #btn-manual-draw:hover:not(:disabled) {
+            background-color: #555;
+        }
+
+        #btn-reset-card {
+            background-color: var(--reset-button-color);
+            color: #1a1a1a;
+            font-weight: bold;
+            font-size: 1.2em;
+            text-align: center;
+            border: 2px solid #fff;
+            padding: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        #btn-reset-card:hover:not(:disabled) {
+            background-color: #ffb74d;
+        }
+
+        #log-area {
+            height: 150px;
+            overflow-y: auto;
+            border-top: 1px solid var(--border-color);
+            font-size: 11px;
+            padding-top: 5px;
+            font-family: monospace;
+            color: #888;
+        }
+
+        .log-bingo {
+            color: #4da6ff;
+        }
+
+        .log-sys {
+            color: #ffcc00;
+        }
+
+        .log-reset {
+            color: var(--reset-button-color);
+        }
+
+        .challenge-tag {
+            background: #cc0000;
+            color: #fff;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 3px;
+            display: none;
+        }
+
+        #timer-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            margin-bottom: 15px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        #timer-bar-fill {
+            height: 100%;
+            background: var(--accent-color);
+            width: 0%;
+            transition: none;
+        }
+
+        #history-area {
+            margin-top: 15px;
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            height: 30px;
+        }
+
+        .history-item {
+            width: 25px;
+            height: 25px;
+            background: #333;
+            color: #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            border-radius: 50%;
+            border: 1px solid #444;
+        }
+
+        .history-item.hit {
+            background-color: var(--hit-color);
+            color: var(--hit-text);
+        }
+
+        #save-notify {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #4da6ff;
+            color: #1a1a1a;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .scroll-panel {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            padding-right: 5px;
+        }
+
+        /* Custom Scrollbar for Webkit */
+        .scroll-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scroll-panel::-webkit-scrollbar-track {
+            background: #222;
+        }
+
+        .scroll-panel::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .scroll-panel::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="column">
+        <h1>System Status</h1>
+        <div class="stat-row">
+            <div>Bingo Points (BP)</div>
+            <div id="bp-display" class="stat-val" style="color: #4da6ff;">0</div>
+        </div>
+        <div class="stat-row">
+            <div>Total Bingos</div>
+            <div id="bingo-display" class="stat-val">0</div>
+        </div>
+        <div class="stat-row">
+            <div>Entropy (Prestige)</div>
+            <div id="entropy-display" class="stat-val" style="color: #ffcc00;">0</div>
+            <div class="sub-val">Multiplier: x<span id="entropy-mult">1.0</span></div>
+        </div>
+
+        <div style="flex-grow:1"></div>
+
+        <div style="margin-bottom: 15px; border-top: 1px solid #444; padding-top: 10px;">
+            <div style="font-size: 0.8em; color: #888; margin-bottom: 5px;">Save Data Management</div>
+            <textarea id="save-data-io"
+                style="width: 100%; height: 60px; background: #222; color: #aaa; border: 1px solid #444; font-size: 0.7em; resize: none; margin-bottom: 5px;"
+                placeholder="Paste save data here..."></textarea>
+            <div style="display: flex; gap: 5px;">
+                <button onclick="exportSave()" style="font-size: 0.8em; padding: 4px;">Export</button>
+                <button onclick="importSave()" style="font-size: 0.8em; padding: 4px;">Import</button>
+            </div>
+        </div>
+
+        <div>
+            <button onclick="hardReset()" style="border-color: #990000; color: #990000; font-size: 0.8em;">HARD RESET
+                (Delete Save)</button>
+        </div>
+        <div id="log-area"></div>
+    </div>
+
+    <div class="column">
+        <h1>
+            Matrix Simulation
+            <span id="challenge-badge" class="challenge-tag">CHALLENGE MODE</span>
+        </h1>
+
+        <div id="game-area">
+            <div id="current-ball">-</div>
+
+            <div id="timer-bar-bg">
+                <div id="timer-bar-fill"></div>
+            </div>
+
+            <div id="bingo-container">
+            </div>
+
+            <div id="history-area"></div>
+
+            <div style="margin-top:10px; font-size: 0.9em; color: #888;">
+                Active Cards: <span id="card-count-display" style="color: #fff;">1</span>
+                <br>
+                Auto Draw Interval: <span id="speed-display">10.0</span>s
+                <button id="btn-pause" onclick="togglePause()"
+                    style="width:auto; padding: 2px 8px; margin-left: 10px; font-size: 0.8em; display:inline-block;">PAUSE</button>
+            </div>
+
+            <button id="btn-reset-card" onclick="resetCard()">
+                RESET CARD & Claim Bonus (<span id="current-bingos">0</span> Bingos)<br>
+                <span style="font-size:0.8em; color:#aaa;">Gain: <span id="reset-bp-gain">0</span> BP</span>
+            </button>
+
+            <button id="btn-manual-draw" onclick="manualDraw()">
+                Manual Draw (-<span id="manual-draw-cost">5</span> BP)
+            </button>
+        </div>
+    </div>
+
+    <div class="column">
+        <h1>Control Panel</h1>
+
+        <div id="tabs" style="display:flex; margin-bottom:10px;">
+            <button onclick="switchTab('upgrades')" id="tab-upg"
+                style="flex:1; text-align:center; border-bottom:2px solid var(--accent-color);">Upgrades</button>
+            <button onclick="switchTab('challenges')" id="tab-chal"
+                style="flex:1; text-align:center; border-bottom:none;">Challenges</button>
+        </div>
+
+        <div id="panel-upgrades" class="scroll-panel">
+            <div id="upgrades-list"></div>
+
+            <div style="margin-top: 20px; border-top: 1px solid #444; padding-top: 10px;">
+                <h2 style="font-size: 0.9em; color: #ffcc00;">Dimensional Shift</h2>
+                <button id="btn-prestige" onclick="doPrestige()" disabled>
+                    Reset for Entropy<br>
+                    <span class="sub-val" style="float:none;">Req: 1.00e6 BP</span>
+                </button>
+                <button id="btn-entropy-upg" onclick="buyEntropyUpgrade()"
+                    style="border-color: #ffcc00; color: #ffcc00; margin-top: 5px;">
+                    Upgrade Entropy Effect<br>
+                    <span class="sub-val" style="float:none;">Cost: 1.00e6 Entropy</span><br>
+                    <span class="sub-val" style="float:none;">Level: <span id="entropy-upg-lvl">0</span></span>
+                </button>
+            </div>
+        </div>
+
+        <div id="panel-challenges" class="scroll-panel" style="display:none;">
+            <div style="font-size: 0.8em; color: #aaa; margin-bottom: 10px;">
+                Complete the goal to unlock the next level and earn permanent perks.
+            </div>
+            <div id="challenges-list"></div>
+            <button onclick="exitChallenge()" id="btn-exit-chal" style="display:none; background:#500;">Exit
+                Challenge</button>
+        </div>
+    </div>
+
+    <div id="save-notify">Game Saved</div>
+
+    <script>
+        const CONFIG = {
+            saveKey: 'bingo_layers_v3_save',
+            initialDrawInterval: 10000,
+            manualDrawCostBase: 5
+        };
+
+        const game = {
+            bp: 0,
+            totalBingos: 0,
+            entropy: 0,
+            entropyUpgLevel: 0,
+            upg: {
+                speed: 0,
+                value: 0,
+                cards: 0,
+            },
+            activeChallenge: null,
+            completedChallenges: {},
+            grids: [],
+            drawn: new Set(),
+            history: [],
+            lastTick: performance.now(),
+            drawTimer: 0,
+            gridSize: 5,
+            maxNum: 75,
+            fixedSpeed: null,
+            decay: false,
+            manualDrawCount: 0, // n: このカードリセット以降のManualDraw回数
+            totalDrawCount: 0,  // m: これまでに引いたボールの総数（自動＋手動）
+            intervalMult: 1.03, // Default multiplier
+            allowDuplicates: false,
+            paused: false
+        };
+
+        const CHALLENGES_META = {
+            "c2": {
+                name: "Expansion",
+                levels: [
+                    { level: 1, req: 0, goal: 500000, desc: "Number range 1-150. Grid 4x4.", apply: g => { g.maxNum = 150; g.gridSize = 4; }, reward: "Entropy Gain +10%" },
+                    { level: 2, req: 1, goal: 2000000, desc: "Number range 1-300. Grid 3x3.", apply: g => { g.maxNum = 300; g.gridSize = 3; }, reward: "Draw Speed +10% per level" }
+                ]
+            },
+            "c3": {
+                name: "Time Dilation",
+                levels: [
+                    { level: 1, req: 0, goal: 100000, desc: "Interval multiplier 1.05x.", apply: g => { g.intervalMult = 1.05; }, reward: "Base BP x1.5" },
+                    { level: 2, req: 1, goal: 500000, desc: "Interval multiplier 1.10x.", apply: g => { g.intervalMult = 1.10; }, reward: "Base BP x2.0" },
+                    { level: 3, req: 2, goal: 2000000, desc: "Interval multiplier 1.20x.", apply: g => { g.intervalMult = 1.20; }, reward: "Base BP x3.0" }
+                ]
+            },
+            "c4": {
+                name: "Chaos",
+                levels: [
+                    { level: 1, req: 0, goal: 100000, desc: "Random intervals & Un-opening numbers.", apply: g => { }, reward: "Base BP x2" },
+                    { level: 2, req: 1, goal: 1000000, desc: "Random intervals & Un-opening numbers.", apply: g => { }, reward: "Entropy Gain +20%" }
+                ]
+            },
+            "c5": {
+                name: "Inflation",
+                levels: [
+                    { level: 1, req: 0, goal: 1000000, desc: "Upgrade costs scale rapidly (2x).", apply: g => { }, reward: "Upgrade Cost -10%" },
+                    { level: 2, req: 1, goal: 10000000, desc: "Upgrade costs scale rapidly (4x).", apply: g => { }, reward: "Upgrade Cost -20%" }
+                ]
+            }
+        };
+
+        const UPGRADES = [
+            { id: 'speed', name: 'Processing Speed', desc: 'Auto Draw interval reduction.', cost: l => 500 * Math.pow(1.8, l), effect: l => (getBaseDrawInterval(l) / 1000).toFixed(1) + 's' },
+            { id: 'value', name: 'Data Mining', desc: 'Increase BP per hit.', cost: l => 150 * Math.pow(1.5, l), effect: l => '+' + (l * 50) + '%' },
+            { id: 'cards', name: 'Parallel Cards', desc: 'Simulate multiple cards at once.', cost: l => 500 * Math.pow(2.2, l), effect: l => (1 + l) + ' Cards' }
+        ];
+
+        const els = {
+            bp: document.getElementById('bp-display'),
+            bingos: document.getElementById('bingo-display'),
+            entropy: document.getElementById('entropy-display'),
+            mult: document.getElementById('entropy-mult'),
+            ball: document.getElementById('current-ball'),
+            grid: document.getElementById('bingo-container'),
+            log: document.getElementById('log-area'),
+            upgList: document.getElementById('upgrades-list'),
+            chalList: document.getElementById('challenges-list'),
+            prestigeBtn: document.getElementById('btn-prestige'),
+            cardCount: document.getElementById('card-count-display'),
+            speed: document.getElementById('speed-display'),
+            badge: document.getElementById('challenge-badge'),
+            resetBtn: document.getElementById('btn-reset-card'),
+            currentBingos: document.getElementById('current-bingos'),
+            manualDrawBtn: document.getElementById('btn-manual-draw'),
+            manualDrawCost: document.getElementById('manual-draw-cost'),
+            timerFill: document.getElementById('timer-bar-fill'),
+            history: document.getElementById('history-area'),
+            entropyUpgBtn: document.getElementById('btn-entropy-upg'),
+            entropyUpgLvl: document.getElementById('entropy-upg-lvl'),
+            pauseBtn: document.getElementById('btn-pause'),
+            resetBpGain: document.getElementById('reset-bp-gain')
+        };
+
+        function init() {
+            loadGame();
+            applyModeSettings();
+
+            if (game.grids.length === 0) {
+                generateGrid();
+            } else {
+                generateGrid(true);
+            }
+
+            renderUI();
+            updateManualDrawCost();
+            updateSpeedDisplay(getDrawInterval());
+
+            setInterval(saveGame, 10000);
+            requestAnimationFrame(gameLoop);
+            log("System Initialized. Auto-draw sequence active.");
+        }
+
+        function saveGame() {
+            const saveObj = {
+                bp: game.bp,
+                totalBingos: game.totalBingos,
+                entropy: game.entropy,
+                entropyUpgLevel: game.entropyUpgLevel,
+                upg: game.upg,
+                activeChallenge: game.activeChallenge,
+                completedChallenges: game.completedChallenges,
+                drawn: Array.from(game.drawn),
+                history: game.history,
+                grids: game.grids.map(g => ({
+                    cells: g.cells.map(c => ({ val: c.val, hit: c.hit })),
+                    bingos: g.bingos
+                })),
+                gridSize: game.gridSize,
+                maxNum: game.maxNum,
+                manualDrawCount: game.manualDrawCount,
+                totalDrawCount: game.totalDrawCount,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(CONFIG.saveKey, JSON.stringify(saveObj));
+            showSaveNotify();
+        }
+
+        function loadGame() {
+            const saved = localStorage.getItem(CONFIG.saveKey);
+            if (saved) {
+                try {
+                    const data = JSON.parse(saved);
+                    game.bp = data.bp || 0;
+                    game.totalBingos = data.totalBingos || 0;
+                    game.entropy = data.entropy || 0;
+                    game.entropyUpgLevel = data.entropyUpgLevel || 0;
+                    game.upg = { ...game.upg, ...(data.upg || {}) };
+                    game.activeChallenge = data.activeChallenge || null;
+                    game.completedChallenges = data.completedChallenges || {};
+                    game.gridSize = data.gridSize || 5;
+                    game.maxNum = data.maxNum || 75;
+                    game.drawn = new Set(data.drawn || []);
+                    game.history = data.history || [];
+                    game.manualDrawCount = data.manualDrawCount || 0;
+                    game.totalDrawCount = data.totalDrawCount || 0;
+
+                    if (data.grids && data.grids.length > 0) {
+                        game.grids = data.grids.map(gData => {
+                            const size = Math.sqrt(gData.cells.length);
+                            const newCard = createCardElement(size, gData.cells);
+                            return {
+                                cells: newCard.cells,
+                                el: newCard.el,
+                                bingos: gData.bingos || 0,
+                                size: size
+                            };
+                        });
+                    } else {
+                        game.grids = [];
+                    }
+
+                } catch (e) {
+                    console.error("Save file corrupted", e);
+                }
+            }
+        }
+
+        function hardReset() {
+            if (confirm("Are you sure? This will wipe all data.")) {
+                localStorage.removeItem(CONFIG.saveKey);
+                location.reload();
+            }
+        }
+
+        function exportSave() {
+            const saveStr = localStorage.getItem(CONFIG.saveKey);
+            if (saveStr) {
+                const b64 = btoa(saveStr);
+                document.getElementById('save-data-io').value = b64;
+                alert("Save data exported to clipboard area.");
+            } else {
+                alert("No save data found.");
+            }
+        }
+
+        function importSave() {
+            const b64 = document.getElementById('save-data-io').value;
+            if (!b64) return;
+            try {
+                const json = atob(b64);
+                JSON.parse(json); // Validate JSON
+                localStorage.setItem(CONFIG.saveKey, json);
+                location.reload();
+            } catch (e) {
+                alert("Invalid save data.");
+                console.error(e);
+            }
+        }
+
+        // アップグレードによる基礎インターバル（m に依存しない部分）
+        function getBaseDrawInterval(level) {
+            let speed = CONFIG.initialDrawInterval / (1 + level * 0.2);
+
+            // Entropy Interval Buff
+            speed /= Math.pow(1.05, game.entropy);
+
+            const c2Level = game.completedChallenges.c2 || 0;
+            if (c2Level >= 2) speed = speed / Math.pow(1.1, level);
+            return speed;
+        }
+
+        // 実際に使うインターバル: Base(upg, entropy) * (mult)^m
+        function getDrawInterval() {
+            if (game.fixedSpeed) return game.fixedSpeed;
+
+            const baseMs = getBaseDrawInterval(game.upg.speed);
+            const m = game.totalDrawCount;
+
+            // Chaos Challenge Random Interval
+            if (game.activeChallenge && game.activeChallenge.startsWith('c4')) {
+                const multipliers = [4, 3, 2, 1.5];
+                const randMult = multipliers[Math.floor(Math.random() * multipliers.length)];
+                return baseMs * Math.pow(game.intervalMult, m) * randMult;
+            }
+
+            return baseMs * Math.pow(game.intervalMult, m);
+        }
+
+        function gameLoop(timestamp) {
+            if (game.paused) {
+                game.lastTick = timestamp;
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            const delta = timestamp - game.lastTick;
+            game.lastTick = timestamp;
+
+            if (game.decay && delta > 0) {
+                let loss = game.bp * (0.01 * (delta / 1000));
+                if (loss > 0 && game.bp > 0) {
+                    game.bp = Math.max(0, game.bp - loss);
+                }
+            }
+
+            let speedMs = getDrawInterval();
+
+            game.drawTimer += delta;
+
+            const progress = (game.drawTimer / speedMs) * 100;
+            els.timerFill.style.width = `${Math.min(100, progress)}%`;
+
+            if (game.drawTimer >= speedMs) {
+                drawBall();
+                game.drawTimer = 0;
+                updateSpeedDisplay(speedMs);
+            }
+
+            updateDisplay();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function togglePause() {
+            game.paused = !game.paused;
+            els.pauseBtn.innerText = game.paused ? "RESUME" : "PAUSE";
+            els.pauseBtn.style.backgroundColor = game.paused ? "#cc0000" : "#2a2a2a";
+        }
+
+        function manualDraw() {
+            const n = game.manualDrawCount;
+            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
+            if (game.bp >= cost) {
+                game.bp -= cost;
+                game.manualDrawCount += 1;
+                drawBall(); // 手動でもボールを1つ引く
+                game.drawTimer = 0;
+                updateManualDrawCost();
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function updateManualDrawCost() {
+            const n = game.manualDrawCount;
+            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
+            els.manualDrawCost.innerText = format(cost);
+        }
+
+        function applyModeSettings() {
+            game.gridSize = 5;
+            game.maxNum = 75;
+            game.fixedSpeed = null;
+            game.decay = false;
+            game.intervalMult = 1.03;
+            game.allowDuplicates = false;
+
+            if (game.activeChallenge) {
+                const [id, level] = game.activeChallenge.split('-L');
+                const c = CHALLENGES_META[id].levels.find(l => l.level == level);
+                if (c) c.apply(game);
+                els.badge.style.display = 'inline-block';
+                els.badge.innerText = `CHALLENGE: ${CHALLENGES_META[id].name} Lv.${level}`;
+                document.body.style.setProperty('--bg-color', '#221111');
+            } else {
+                els.badge.style.display = 'none';
+                document.body.style.setProperty('--bg-color', '#1a1a1a');
+            }
+        }
+
+        function createCardElement(size, initialCells = null) {
+            const totalCells = size * size;
+            const centerIdx = (size % 2 !== 0) ? Math.floor(totalCells / 2) : -1;
+            const newCells = [];
+            const div = document.createElement('div');
+            div.className = 'bingo-card';
+            div.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+
+            for (let i = 0; i < totalCells; i++) {
+                let isFree = (i === centerIdx);
+                let val;
+                let hitState = isFree;
+
+                if (initialCells && initialCells.length > i) {
+                    val = initialCells[i].val;
+                    hitState = initialCells[i].hit;
+                } else {
+                    if (isFree) {
+                        val = "FREE";
+                    } else {
+                        do {
+                            val = Math.floor(Math.random() * game.maxNum) + 1;
+                        } while (newCells.some(c => c.val === val));
+
+                        // Retroactive check: if this number was already drawn, mark it hit
+                        if (game.drawn.has(val)) {
+                            hitState = true;
+                        }
+                    }
+                }
+
+                const cellDiv = document.createElement('div');
+                cellDiv.className = 'cell' + (hitState ? ' hit' : '') + (isFree ? ' free' : '');
+                cellDiv.innerText = val;
+
+                newCells.push({ val: val, hit: hitState, el: cellDiv });
+                div.appendChild(cellDiv);
+            }
+            const newCardObj = { cells: newCells, el: div, size: size, bingos: 0 };
+            // Recalculate bingos immediately for retroactive hits
+            recalcBingos(newCardObj);
+            updateReach(newCardObj);
+            updateBingoVisuals(newCardObj);
+            return newCardObj;
+        }
+
+        function generateGrid(preserveState = false) {
+            if (!preserveState) {
+                game.drawn.clear();
+                game.history = [];
+                els.grid.innerHTML = '';
+                game.grids = [];
+                game.manualDrawCount = 0; // カードリセットでnをリセット
+            }
+
+            const targetCardCount = 1 + game.upg.cards;
+
+            if (game.grids.length < targetCardCount) {
+                for (let i = game.grids.length; i < targetCardCount; i++) {
+                    const newCard = createCardElement(game.gridSize);
+                    game.grids.push({
+                        cells: newCard.cells,
+                        bingos: 0,
+                        el: newCard.el,
+                        size: game.gridSize
+                    });
+                    els.grid.appendChild(newCard.el);
+                }
+            } else if (game.grids.length > targetCardCount) {
+                for (let i = game.grids.length - 1; i >= targetCardCount; i--) {
+                    els.grid.removeChild(game.grids[i].el);
+                }
+                game.grids.splice(targetCardCount);
+            }
+
+            if (preserveState && game.grids.length > 0) {
+                els.grid.innerHTML = '';
+                game.grids.forEach(g => els.grid.appendChild(g.el));
+            }
+        }
+
+        function drawBall() {
+            if (!game.allowDuplicates && game.drawn.size >= game.maxNum) {
+                els.ball.innerText = "FULL";
+                return;
+            }
+
+            let num;
+            if (game.allowDuplicates) {
+                num = Math.floor(Math.random() * game.maxNum) + 1;
+            } else {
+                do {
+                    num = Math.floor(Math.random() * game.maxNum) + 1;
+                } while (game.drawn.has(num));
+            }
+
+            game.drawn.add(num);
+            game.totalDrawCount += 1; // m を増やす
+            els.ball.innerText = num;
+
+            game.history.unshift(num);
+            if (game.history.length > 10) game.history.pop();
+
+            let totalHits = 0;
+
+            game.grids.forEach(card => {
+                let cardHit = false;
+                card.cells.forEach(c => {
+                    if (c.val === num) {
+                        c.hit = true;
+                        c.el.classList.add('hit');
+                        cardHit = true;
+                    }
+                });
+
+                if (cardHit) {
+                    totalHits++;
+                    checkWin(card);
+                    updateReach(card);
+                    updateBingoVisuals(card);
+                }
+            });
+
+            if (totalHits > 0) {
+                const base = 1 + (game.upg.value * 0.5);
+                const entMult = 1 + (game.entropy * 0.1);
+                const reward = challengeRewardMult();
+
+                let gain = base * totalHits * entMult * reward;
+                game.bp += gain;
+            }
+
+            if (game.activeChallenge) {
+                const [id, levelStr] = game.activeChallenge.split('-L');
+                const level = parseInt(levelStr, 10);
+                const goal = CHALLENGES_META[id].levels.find(l => l.level == level).goal;
+                if (game.bp >= goal) {
+                    completeChallenge(id, level);
+                }
+            }
+        }
+
+        function checkWin(card) {
+            const size = card.size;
+            let newBingos = 0;
+
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                if (line.every(idx => card.cells[idx].hit)) {
+                    newBingos++;
+                }
+            });
+
+            if (newBingos > card.bingos) {
+                const achieved = newBingos - card.bingos;
+                card.bingos = newBingos;
+                game.totalBingos += achieved;
+                log(`BINGO! Card achieved ${newBingos} lines.`);
+            }
+        }
+
+        function recalcBingos(card) {
+            const size = card.size;
+            let currentBingos = 0;
+
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                if (line.every(idx => card.cells[idx].hit)) {
+                    currentBingos++;
+                }
+            });
+            card.bingos = currentBingos;
+        }
+
+        function updateReach(card) {
+            const size = card.size;
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            // Reset reach classes first (optional, but safer)
+            card.cells.forEach(c => c.el.classList.remove('reach'));
+
+            lines.forEach(line => {
+                const hits = line.filter(idx => card.cells[idx].hit).length;
+                if (hits === size - 1) {
+                    const unhitIdx = line.find(idx => !card.cells[idx].hit);
+                    if (unhitIdx !== undefined) {
+                        card.cells[unhitIdx].el.classList.add('reach');
+                    }
+                }
+            });
+        }
+
+        function updateBingoVisuals(card) {
+            const size = card.size;
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                if (line.every(idx => card.cells[idx].hit)) {
+                    line.forEach(idx => card.cells[idx].el.classList.add('bingo-completed'));
+                }
+            });
+        }
+
+        function resetCard() {
+            const totalCurrentBingos = game.grids.reduce((sum, g) => sum + g.bingos, 0);
+            if (totalCurrentBingos === 0) return;
+
+            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
+            game.bp += bonus;
+            log(`CARD RESET! Claimed ${format(bonus)} BP for ${totalCurrentBingos} bingos across ${game.grids.length} cards.`);
+
+            // 内部状態のリセット
+            game.drawn.clear();
+            game.history = [];
+            game.manualDrawCount = 0;   // n をリセット
+            game.totalDrawCount = 0;
+            game.drawTimer = 0;
+
+
+            // カード再生成
+            generateGrid();
+
+            // 表示更新（ここが重要）
+            updateManualDrawCost();
+            updateSpeedDisplay(getDrawInterval());
+            updateDisplay();
+        }
+
+
+        function doPrestige() {
+            if (game.bp < 1000000) return;
+
+            let baseGain = Math.floor(Math.pow(game.bp / 1000000, 0.5));
+
+            // New Multiplier: (1 + Total Completed Challenge Levels)
+            const totalLevels = Object.values(game.completedChallenges).reduce((a, b) => a + Number(b), 0);
+            baseGain *= (1 + totalLevels);
+            const c2Level = game.completedChallenges.c2 || 0;
+            if (c2Level >= 1) baseGain *= 1.1;
+            const c4Level = game.completedChallenges.c4 || 0;
+            if (c4Level >= 2) baseGain *= 1.2; // Chaos Lv2 Reward
+
+            const gain = Math.floor(baseGain);
+
+            if (confirm(`Reset for ${gain} Entropy?`)) {
+                game.entropy += gain;
+                softReset();
+                saveGame();
+            }
+        }
+
+        function buyEntropyUpgrade() {
+            const cost = 1000000;
+            if (game.entropy >= cost) {
+                game.entropy -= cost;
+                game.entropyUpgLevel++;
+                renderUI();
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function softReset() {
+            game.bp = 0;
+            game.upg.speed = 0;
+            game.upg.value = 0;
+            game.upg.cards = 0;
+            game.manualDrawCount = 0;
+            game.totalDrawCount = 0;
+
+            applyModeSettings();
+            generateGrid();
+            renderUI();
+            updateManualDrawCost();
+            updateSpeedDisplay(getDrawInterval());
+            log("System Reset Complete.");
+        }
+
+        function startChallenge(id, level) {
+            if (game.activeChallenge) return;
+
+            const meta = CHALLENGES_META[id].levels.find(l => l.level === level);
+            if (!meta) return;
+
+            if (level > 1 && (game.completedChallenges[id] || 0) < level - 1) return;
+
+            if (confirm(`Start "${CHALLENGES_META[id].name} Lv.${level}" (Goal: ${format(meta.goal)} BP)? This will perform a RESET.`)) {
+                game.activeChallenge = `${id}-L${level}`;
+                softReset();
+                saveGame();
+            }
+        }
+
+        function exitChallenge() {
+            if (confirm("Exit Challenge? (Progress will be lost)")) {
+                game.activeChallenge = null;
+                softReset();
+                saveGame();
+            }
+        }
+
+        function completeChallenge(id, level) {
+            const meta = CHALLENGES_META[id].levels.find(l => l.level == level);
+            if (!meta) return;
+
+            alert(`Challenge "${CHALLENGES_META[id].name} Lv.${level}" Completed!\nReward: ${meta.reward}`);
+            game.completedChallenges[id] = level;
+            game.activeChallenge = null;
+            softReset();
+            saveGame();
+        }
+
+        function challengeRewardMult() {
+            let m = 1;
+            // Removed c1 reward
+            if ((game.completedChallenges.c4 || 0) >= 1) m *= 2; // Chaos Lv1 Reward
+            return m;
+        }
+
+        function getCardCostScale() {
+            // Removed c1 reward
+            return 1.0;
+        }
+
+        function buy(id) {
+            const def = UPGRADES.find(u => u.id === id);
+            let cost = Math.floor(def.cost(game.upg[id]));
+
+            if (id === 'cards') cost *= getCardCostScale();
+
+            if (game.bp >= cost) {
+                game.bp -= cost;
+                game.upg[id]++;
+
+                if (id === 'cards') {
+                    generateGrid(true);
+                }
+
+                renderUI();
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function switchTab(t) {
+            document.getElementById('panel-upgrades').style.display = t === 'upgrades' ? 'block' : 'none';
+            document.getElementById('panel-challenges').style.display = t === 'challenges' ? 'block' : 'none';
+            document.getElementById('tab-upg').style.borderBottom = t === 'upgrades' ? '2px solid var(--accent-color)' : 'none';
+            document.getElementById('tab-chal').style.borderBottom = t === 'challenges' ? '2px solid var(--accent-color)' : 'none';
+        }
+
+        function renderUI() {
+            // Render Upgrades
+            let html = '';
+            UPGRADES.forEach(u => {
+                let cost = Math.floor(u.cost(game.upg[u.id]));
+                if (u.id === 'cards') cost *= getCardCostScale();
+
+                html += `
+            <button onclick="buy('${u.id}')" id="btn-${u.id}">
+                <div><span class="lvl">Lv.${game.upg[u.id]}</span> ${u.name}</div>
+                <div style="font-size:0.8em; color:#888;">${u.desc}</div>
+                <div style="margin-top:4px;">
+                    <span style="color:#fff;">Effect: ${u.effect(game.upg[u.id])}</span>
+                    <span class="cost">${format(cost)} BP</span>
+                </div>
+            </button>`;
+            });
+            els.upgList.innerHTML = html;
+
+            // Render Challenges
+            let cHtml = '';
+            for (let id in CHALLENGES_META) {
+                const meta = CHALLENGES_META[id];
+                const currentLevel = game.completedChallenges[id] || 0;
+
+                meta.levels.forEach(c => {
+                    const isDone = currentLevel >= c.level;
+                    const isUnlocked = c.level === 1 || currentLevel >= c.level - 1;
+                    const isActive = game.activeChallenge && game.activeChallenge.includes(`${id}-L${c.level}`);
+
+                    cHtml += `
+                <div style="border:1px solid #444; padding:8px; margin-bottom:8px; background:${isActive ? '#331111' : '#222'}; opacity:${isUnlocked ? 1 : 0.4}">
+                    <div style="font-weight:bold; color:${isDone ? '#00cc00' : '#fff'}">
+                        ${meta.name} Lv.${c.level} ${isDone ? '✔' : ''}
+                    </div>
+                    <div style="font-size:0.8em; color:#aaa; margin:5px 0;">${c.desc}</div>
+                    <div style="font-size:0.8em; color:#ffcc00;">Goal: ${format(c.goal)} BP | Reward: ${c.reward}</div>
+                    ${isUnlocked && !isActive && !game.activeChallenge ?
+                            `<button onclick="startChallenge('${id}', ${c.level})" style="margin-top:5px; font-size:0.8em;">Start Challenge</button>` : ''}
+                    ${!isUnlocked ? '<div style="color:#f44; font-size:0.8em; margin-top:5px;">LOCKED (Complete Lv.' + (c.level - 1) + ')</div>' : ''}
+                    ${isActive ? '<div style="color:#f44; font-size:0.8em; margin-top:5px;">ACTIVE</div>' : ''}
+                </div>`;
+                });
+            }
+            els.chalList.innerHTML = cHtml;
+
+            document.getElementById('btn-exit-chal').style.display = game.activeChallenge ? 'block' : 'none';
+        }
+
+        function updateDisplay() {
+            els.bp.innerText = format(game.bp);
+            els.bingos.innerText = format(game.totalBingos);
+            els.entropy.innerText = format(game.entropy);
+            els.mult.innerText = (1 + game.entropy * 0.1).toFixed(1);
+            els.cardCount.innerText = format(game.grids.length);
+            els.entropyUpgLvl.innerText = game.entropyUpgLevel;
+
+            const totalCurrentBingos = game.grids.reduce((sum, g) => sum + g.bingos, 0);
+            els.currentBingos.innerText = totalCurrentBingos;
+
+            // Update Reset BP Gain
+            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
+            els.resetBpGain.innerText = format(bonus);
+
+
+            UPGRADES.forEach(u => {
+                const btn = document.getElementById(`btn-${u.id}`);
+                if (btn) {
+                    let cost = Math.floor(u.cost(game.upg[u.id]));
+                    if (u.id === 'cards') cost *= getCardCostScale();
+                    btn.disabled = game.bp < cost;
+                }
+            });
+
+            els.prestigeBtn.disabled = game.bp < 1000000;
+            els.entropyUpgBtn.disabled = game.entropy < 1000000;
+
+            const n = game.manualDrawCount;
+            const manualCost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
+            els.manualDrawBtn.disabled = game.bp < manualCost;
+
+            if (game.activeChallenge) {
+                els.resetBtn.style.display = 'none';
+            } else {
+                els.resetBtn.style.display = totalCurrentBingos > 0 ? 'block' : 'none';
+            }
+
+            // Render History
+            if (els.history) {
+                els.history.innerHTML = game.history.map(n => {
+                    // Check if the number is currently marked on *any* card
+                    const isHit = game.grids.some(g => g.cells.some(c => c.val === n && c.hit));
+                    return `<div class="history-item ${isHit ? 'hit' : ''}">${n}</div>`;
+                }).join('');
+            }
+        }
+
+        function updateSpeedDisplay(intervalMs) {
+            els.speed.innerText = (intervalMs / 1000).toFixed(1);
+        }
+
+        function log(msg) {
+            const div = document.createElement('div');
+            div.innerText = `> ${msg}`;
+            if (msg.includes('BINGO')) div.className = 'log-bingo';
+            if (msg.includes('System')) div.className = 'log-sys';
+            if (msg.includes('RESET')) div.className = 'log-reset';
+            els.log.insertBefore(div, els.log.firstChild);
+            if (els.log.children.length > 30) els.log.removeChild(els.log.lastChild);
+        }
+
+        function format(n) {
+            if (n >= 1e6) return n.toExponential(2);
+            return Math.floor(n).toLocaleString();
+        }
+
+        function showSaveNotify() {
+            const n = document.getElementById('save-notify');
+            n.style.opacity = 1;
+            setTimeout(() => n.style.opacity = 0, 1000);
+        }
+
+        // --- Initialization ---
+        window.onload = init;
+
+    </script>
+</body>
+
+</html>
