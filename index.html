@@ -706,7 +706,7 @@
             const totalCurrentBingos = game.grids.reduce((sum, g) => sum + g.bingos, 0);
             if (totalCurrentBingos === 0) return;
 
-            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
+            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * Math.max(1, game.entropy);
             game.bp += bonus;
             log(`CARD RESET! Claimed ${format(bonus)} BP for ${totalCurrentBingos} bingos.`);
 
@@ -912,14 +912,14 @@
             els.bp.innerText = format(game.bp);
             els.bingos.innerText = format(game.totalBingos);
             els.entropy.innerText = format(game.entropy);
-            els.mult.innerText = (1 + game.entropy * 0.1).toFixed(1);
+            els.mult.innerText = Math.max(1, game.entropy).toFixed(1);
             els.cardCount.innerText = format(game.grids.length);
             els.entropyUpgLvl.innerText = game.entropyUpgLevel;
 
             const totalCurrentBingos = game.grids.reduce((sum, g) => sum + g.bingos, 0);
             els.currentBingos.innerText = totalCurrentBingos;
 
-            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
+            const bonus = Math.pow(totalCurrentBingos, 2) * 50 * Math.max(1, game.entropy);
             els.resetBpGain.innerText = format(bonus);
 
             UPGRADES.forEach(u => {
@@ -1136,7 +1136,7 @@
 
             if (totalHits > 0) {
                 const base = 1 + (game.upg.value * 0.5);
-                const entMult = 1 + (game.entropy * 0.1);
+                const entMult = Math.max(1, game.entropy);
                 const reward = challengeRewardMult();
 
                 let gain = base * totalHits * entMult * reward;
