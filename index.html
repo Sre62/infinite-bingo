@@ -451,10 +451,12 @@
             maxNum: 75,
             fixedSpeed: null,
             decay: false,
-            manualDrawCount: 0, // n: このカードリセット以降のManualDraw回数
-            totalDrawCount: 0,  // m: これまでに引いたボールの総数（自動＋手動）
-            intervalMult: 1.03, // Default multiplier
+            manualDrawCount: 0,
+            totalDrawCount: 0,
+            intervalMult: 1.03,
             allowDuplicates: false,
+            interference: false,
+            interferenceCount: 0,
             paused: false
         };
 
@@ -475,17 +477,24 @@
                 ]
             },
             "c4": {
-                name: "Chaos",
+                name: "Loop",
                 levels: [
-                    { level: 1, req: 0, goal: 100000, desc: "Random intervals & Un-opening numbers.", apply: g => { }, reward: "Base BP x2" },
-                    { level: 2, req: 1, goal: 1000000, desc: "Random intervals & Un-opening numbers.", apply: g => { }, reward: "Entropy Gain +20%" }
+                    { level: 1, req: 0, goal: 100000000, desc: "Duplicates allowed. Pool unaffected by history.", apply: g => { g.allowDuplicates = true; }, reward: "Entropy Gain +20%" },
+                    { level: 2, req: 1, goal: 10000000000, desc: "Duplicates allowed.", apply: g => { g.allowDuplicates = true; }, reward: "Base BP x2" }
                 ]
             },
             "c5": {
-                name: "Inflation",
+                name: "Interference",
                 levels: [
-                    { level: 1, req: 0, goal: 1000000, desc: "Upgrade costs scale rapidly (2x).", apply: g => { }, reward: "Upgrade Cost -10%" },
-                    { level: 2, req: 1, goal: 10000000, desc: "Upgrade costs scale rapidly (4x).", apply: g => { }, reward: "Upgrade Cost -20%" }
+                    { level: 1, req: 0, goal: 500000000, desc: "Every 2 draws, a random number is removed if present.", apply: g => { g.interference = true; }, reward: "Manual Draw Cost -50%" }
+                ]
+            },
+            "c6": {
+                name: "Hyperinflation",
+                levels: [
+                    { level: 1, req: 0, goal: 100000000, desc: "Upgrade costs scale 2x faster.", apply: g => { }, reward: "Base BP x3" },
+                    { level: 2, req: 1, goal: 10000000000, desc: "Upgrade costs scale 4x faster.", apply: g => { }, reward: "Entropy Gain +50%" },
+                    { level: 3, req: 2, goal: 1000000000000, desc: "Upgrade costs scale 8x faster.", apply: g => { }, reward: "Base BP x10" }
                 ]
             }
         };
@@ -638,32 +647,18 @@
             }
         }
 
-        // アップグレードによる基礎インターバル（m に依存しない部分）
         function getBaseDrawInterval(level) {
             let speed = CONFIG.initialDrawInterval / (1 + level * 0.2);
-
-            // Entropy Interval Buff
             speed /= Math.pow(1.05, game.entropy);
-
             const c2Level = game.completedChallenges.c2 || 0;
             if (c2Level >= 2) speed = speed / Math.pow(1.1, level);
             return speed;
         }
 
-        // 実際に使うインターバル: Base(upg, entropy) * (mult)^m
         function getDrawInterval() {
             if (game.fixedSpeed) return game.fixedSpeed;
-
             const baseMs = getBaseDrawInterval(game.upg.speed);
             const m = game.totalDrawCount;
-
-            // Chaos Challenge Random Interval
-            if (game.activeChallenge && game.activeChallenge.startsWith('c4')) {
-                const multipliers = [4, 3, 2, 1.5];
-                const randMult = multipliers[Math.floor(Math.random() * multipliers.length)];
-                return baseMs * Math.pow(game.intervalMult, m) * randMult;
-            }
-
             return baseMs * Math.pow(game.intervalMult, m);
         }
 
@@ -704,269 +699,7 @@
         function togglePause() {
             game.paused = !game.paused;
             els.pauseBtn.innerText = game.paused ? "RESUME" : "PAUSE";
-            els.pauseBtn.style.backgroundColor = game.paused ? "#cc0000" : "#2a2a2a";
-        }
-
-        function manualDraw() {
-            const n = game.manualDrawCount;
-            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
-            if (game.bp >= cost) {
-                game.bp -= cost;
-                game.manualDrawCount += 1;
-                drawBall(); // 手動でもボールを1つ引く
-                game.drawTimer = 0;
-                updateManualDrawCost();
-                updateDisplay();
-                saveGame();
-            }
-        }
-
-        function updateManualDrawCost() {
-            const n = game.manualDrawCount;
-            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
-            els.manualDrawCost.innerText = format(cost);
-        }
-
-        function applyModeSettings() {
-            game.gridSize = 5;
-            game.maxNum = 75;
-            game.fixedSpeed = null;
-            game.decay = false;
-            game.intervalMult = 1.03;
-            game.allowDuplicates = false;
-
-            if (game.activeChallenge) {
-                const [id, level] = game.activeChallenge.split('-L');
-                const c = CHALLENGES_META[id].levels.find(l => l.level == level);
-                if (c) c.apply(game);
-                els.badge.style.display = 'inline-block';
-                els.badge.innerText = `CHALLENGE: ${CHALLENGES_META[id].name} Lv.${level}`;
-                document.body.style.setProperty('--bg-color', '#221111');
-            } else {
-                els.badge.style.display = 'none';
-                document.body.style.setProperty('--bg-color', '#1a1a1a');
-            }
-        }
-
-        function createCardElement(size, initialCells = null) {
-            const totalCells = size * size;
-            const centerIdx = (size % 2 !== 0) ? Math.floor(totalCells / 2) : -1;
-            const newCells = [];
-            const div = document.createElement('div');
-            div.className = 'bingo-card';
-            div.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
-
-            for (let i = 0; i < totalCells; i++) {
-                let isFree = (i === centerIdx);
-                let val;
-                let hitState = isFree;
-
-                if (initialCells && initialCells.length > i) {
-                    val = initialCells[i].val;
-                    hitState = initialCells[i].hit;
-                } else {
-                    if (isFree) {
-                        val = "FREE";
-                    } else {
-                        do {
-                            val = Math.floor(Math.random() * game.maxNum) + 1;
-                        } while (newCells.some(c => c.val === val));
-
-                        // Retroactive check: if this number was already drawn, mark it hit
-                        if (game.drawn.has(val)) {
-                            hitState = true;
-                        }
-                    }
-                }
-
-                const cellDiv = document.createElement('div');
-                cellDiv.className = 'cell' + (hitState ? ' hit' : '') + (isFree ? ' free' : '');
-                cellDiv.innerText = val;
-
-                newCells.push({ val: val, hit: hitState, el: cellDiv });
-                div.appendChild(cellDiv);
-            }
-            const newCardObj = { cells: newCells, el: div, size: size, bingos: 0 };
-            // Recalculate bingos immediately for retroactive hits
-            recalcBingos(newCardObj);
-            updateReach(newCardObj);
-            updateBingoVisuals(newCardObj);
-            return newCardObj;
-        }
-
-        function generateGrid(preserveState = false) {
-            if (!preserveState) {
-                game.drawn.clear();
-                game.history = [];
-                els.grid.innerHTML = '';
-                game.grids = [];
-                game.manualDrawCount = 0; // カードリセットでnをリセット
-            }
-
-            const targetCardCount = 1 + game.upg.cards;
-
-            if (game.grids.length < targetCardCount) {
-                for (let i = game.grids.length; i < targetCardCount; i++) {
-                    const newCard = createCardElement(game.gridSize);
-                    game.grids.push({
-                        cells: newCard.cells,
-                        bingos: 0,
-                        el: newCard.el,
-                        size: game.gridSize
-                    });
-                    els.grid.appendChild(newCard.el);
-                }
-            } else if (game.grids.length > targetCardCount) {
-                for (let i = game.grids.length - 1; i >= targetCardCount; i--) {
-                    els.grid.removeChild(game.grids[i].el);
-                }
-                game.grids.splice(targetCardCount);
-            }
-
-            if (preserveState && game.grids.length > 0) {
-                els.grid.innerHTML = '';
-                game.grids.forEach(g => els.grid.appendChild(g.el));
-            }
-        }
-
-        function drawBall() {
-            if (!game.allowDuplicates && game.drawn.size >= game.maxNum) {
-                els.ball.innerText = "FULL";
-                return;
-            }
-
-            let num;
-            if (game.allowDuplicates) {
-                num = Math.floor(Math.random() * game.maxNum) + 1;
-            } else {
-                do {
-                    num = Math.floor(Math.random() * game.maxNum) + 1;
-                } while (game.drawn.has(num));
-            }
-
-            game.drawn.add(num);
-            game.totalDrawCount += 1; // m を増やす
-            els.ball.innerText = num;
-
-            game.history.unshift(num);
-            if (game.history.length > 10) game.history.pop();
-
-            let totalHits = 0;
-
-            game.grids.forEach(card => {
-                let cardHit = false;
-                card.cells.forEach(c => {
-                    if (c.val === num) {
-                        c.hit = true;
-                        c.el.classList.add('hit');
-                        cardHit = true;
-                    }
-                });
-
-                if (cardHit) {
-                    totalHits++;
-                    checkWin(card);
-                    updateReach(card);
-                    updateBingoVisuals(card);
-                }
-            });
-
-            if (totalHits > 0) {
-                const base = 1 + (game.upg.value * 0.5);
-                const entMult = 1 + (game.entropy * 0.1);
-                const reward = challengeRewardMult();
-
-                let gain = base * totalHits * entMult * reward;
-                game.bp += gain;
-            }
-
-            if (game.activeChallenge) {
-                const [id, levelStr] = game.activeChallenge.split('-L');
-                const level = parseInt(levelStr, 10);
-                const goal = CHALLENGES_META[id].levels.find(l => l.level == level).goal;
-                if (game.bp >= goal) {
-                    completeChallenge(id, level);
-                }
-            }
-        }
-
-        function checkWin(card) {
-            const size = card.size;
-            let newBingos = 0;
-
-            const lines = [];
-            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
-            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
-            lines.push([...Array(size)].map((_, i) => i * size + i));
-            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
-
-            lines.forEach(line => {
-                if (line.every(idx => card.cells[idx].hit)) {
-                    newBingos++;
-                }
-            });
-
-            if (newBingos > card.bingos) {
-                const achieved = newBingos - card.bingos;
-                card.bingos = newBingos;
-                game.totalBingos += achieved;
-                log(`BINGO! Card achieved ${newBingos} lines.`);
-            }
-        }
-
-        function recalcBingos(card) {
-            const size = card.size;
-            let currentBingos = 0;
-
-            const lines = [];
-            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
-            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
-            lines.push([...Array(size)].map((_, i) => i * size + i));
-            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
-
-            lines.forEach(line => {
-                if (line.every(idx => card.cells[idx].hit)) {
-                    currentBingos++;
-                }
-            });
-            card.bingos = currentBingos;
-        }
-
-        function updateReach(card) {
-            const size = card.size;
-            const lines = [];
-            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
-            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
-            lines.push([...Array(size)].map((_, i) => i * size + i));
-            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
-
-            // Reset reach classes first (optional, but safer)
-            card.cells.forEach(c => c.el.classList.remove('reach'));
-
-            lines.forEach(line => {
-                const hits = line.filter(idx => card.cells[idx].hit).length;
-                if (hits === size - 1) {
-                    const unhitIdx = line.find(idx => !card.cells[idx].hit);
-                    if (unhitIdx !== undefined) {
-                        card.cells[unhitIdx].el.classList.add('reach');
-                    }
-                }
-            });
-        }
-
-        function updateBingoVisuals(card) {
-            const size = card.size;
-            const lines = [];
-            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
-            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
-            lines.push([...Array(size)].map((_, i) => i * size + i));
-            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
-
-            lines.forEach(line => {
-                if (line.every(idx => card.cells[idx].hit)) {
-                    line.forEach(idx => card.cells[idx].el.classList.add('bingo-completed'));
-                }
-            });
+            els.pauseBtn.style.background = game.paused ? "#555" : "#2a2a2a";
         }
 
         function resetCard() {
@@ -975,38 +708,33 @@
 
             const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
             game.bp += bonus;
-            log(`CARD RESET! Claimed ${format(bonus)} BP for ${totalCurrentBingos} bingos across ${game.grids.length} cards.`);
+            log(`CARD RESET! Claimed ${format(bonus)} BP for ${totalCurrentBingos} bingos.`);
 
-            // 内部状態のリセット
             game.drawn.clear();
             game.history = [];
-            game.manualDrawCount = 0;   // n をリセット
+            game.manualDrawCount = 0;
             game.totalDrawCount = 0;
             game.drawTimer = 0;
 
-
-            // カード再生成
             generateGrid();
 
-            // 表示更新（ここが重要）
             updateManualDrawCost();
             updateSpeedDisplay(getDrawInterval());
             updateDisplay();
         }
 
-
         function doPrestige() {
             if (game.bp < 1000000) return;
 
             let baseGain = Math.floor(Math.pow(game.bp / 1000000, 0.5));
-
-            // New Multiplier: (1 + Total Completed Challenge Levels)
             const totalLevels = Object.values(game.completedChallenges).reduce((a, b) => a + Number(b), 0);
             baseGain *= (1 + totalLevels);
             const c2Level = game.completedChallenges.c2 || 0;
             if (c2Level >= 1) baseGain *= 1.1;
+
+            // Chaos removed, check Loop reward?
             const c4Level = game.completedChallenges.c4 || 0;
-            if (c4Level >= 2) baseGain *= 1.2; // Chaos Lv2 Reward
+            if (c4Level >= 1) baseGain *= 1.2; // Loop Lv1 Reward (Entropy +20%)
 
             const gain = Math.floor(baseGain);
 
@@ -1080,21 +808,38 @@
 
         function challengeRewardMult() {
             let m = 1;
-            // Removed c1 reward
-            if ((game.completedChallenges.c4 || 0) >= 1) m *= 2; // Chaos Lv1 Reward
+            // Loop Lv2 Reward: Base BP x2
+            if ((game.completedChallenges.c4 || 0) >= 2) m *= 2;
             return m;
         }
 
         function getCardCostScale() {
-            // Removed c1 reward
             return 1.0;
+        }
+
+        function getUpgradeCost(id, level) {
+            const def = UPGRADES.find(u => u.id === id);
+            let cost = Math.floor(def.cost(level));
+
+            if (id === 'cards') cost *= getCardCostScale();
+
+            if (game.activeChallenge && game.activeChallenge.startsWith('c6')) {
+                const [_, lvlStr] = game.activeChallenge.split('-L');
+                const lvl = parseInt(lvlStr);
+                let mult = 1;
+                if (lvl === 1) mult = 2;
+                if (lvl === 2) mult = 4;
+                if (lvl === 3) mult = 8;
+
+                cost = cost * Math.pow(mult, level);
+            }
+
+            return Math.floor(cost);
         }
 
         function buy(id) {
             const def = UPGRADES.find(u => u.id === id);
-            let cost = Math.floor(def.cost(game.upg[id]));
-
-            if (id === 'cards') cost *= getCardCostScale();
+            let cost = getUpgradeCost(id, game.upg[id]);
 
             if (game.bp >= cost) {
                 game.bp -= cost;
@@ -1118,11 +863,9 @@
         }
 
         function renderUI() {
-            // Render Upgrades
             let html = '';
             UPGRADES.forEach(u => {
-                let cost = Math.floor(u.cost(game.upg[u.id]));
-                if (u.id === 'cards') cost *= getCardCostScale();
+                let cost = getUpgradeCost(u.id, game.upg[u.id]);
 
                 html += `
             <button onclick="buy('${u.id}')" id="btn-${u.id}">
@@ -1136,7 +879,6 @@
             });
             els.upgList.innerHTML = html;
 
-            // Render Challenges
             let cHtml = '';
             for (let id in CHALLENGES_META) {
                 const meta = CHALLENGES_META[id];
@@ -1177,16 +919,13 @@
             const totalCurrentBingos = game.grids.reduce((sum, g) => sum + g.bingos, 0);
             els.currentBingos.innerText = totalCurrentBingos;
 
-            // Update Reset BP Gain
             const bonus = Math.pow(totalCurrentBingos, 2) * 50 * (1 + game.entropy * 0.1);
             els.resetBpGain.innerText = format(bonus);
-
 
             UPGRADES.forEach(u => {
                 const btn = document.getElementById(`btn-${u.id}`);
                 if (btn) {
-                    let cost = Math.floor(u.cost(game.upg[u.id]));
-                    if (u.id === 'cards') cost *= getCardCostScale();
+                    let cost = getUpgradeCost(u.id, game.upg[u.id]);
                     btn.disabled = game.bp < cost;
                 }
             });
@@ -1198,16 +937,10 @@
             const manualCost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
             els.manualDrawBtn.disabled = game.bp < manualCost;
 
-            if (game.activeChallenge) {
-                els.resetBtn.style.display = 'none';
-            } else {
-                els.resetBtn.style.display = totalCurrentBingos > 0 ? 'block' : 'none';
-            }
+            els.resetBtn.style.display = totalCurrentBingos > 0 ? 'block' : 'none';
 
-            // Render History
             if (els.history) {
                 els.history.innerHTML = game.history.map(n => {
-                    // Check if the number is currently marked on *any* card
                     const isHit = game.grids.some(g => g.cells.some(c => c.val === n && c.hit));
                     return `<div class="history-item ${isHit ? 'hit' : ''}">${n}</div>`;
                 }).join('');
@@ -1239,7 +972,286 @@
             setTimeout(() => n.style.opacity = 0, 1000);
         }
 
-        // --- Initialization ---
+        function applyModeSettings() {
+            game.gridSize = 5;
+            game.maxNum = 75;
+            game.fixedSpeed = null;
+            game.decay = false;
+            game.intervalMult = 1.03;
+            game.allowDuplicates = false;
+            game.interference = false;
+            game.interferenceCount = 0;
+
+            if (game.activeChallenge) {
+                const [id, level] = game.activeChallenge.split('-L');
+                const c = CHALLENGES_META[id].levels.find(l => l.level == level);
+                if (c) c.apply(game);
+                els.badge.style.display = 'inline-block';
+                els.badge.innerText = `CHALLENGE: ${CHALLENGES_META[id].name} Lv.${level}`;
+                document.body.style.setProperty('--bg-color', '#221111');
+            } else {
+                els.badge.style.display = 'none';
+                document.body.style.setProperty('--bg-color', '#1a1a1a');
+            }
+        }
+
+        function createCardElement(size, initialCells = null) {
+            const totalCells = size * size;
+            const centerIdx = (size % 2 !== 0) ? Math.floor(totalCells / 2) : -1;
+            const newCells = [];
+            const div = document.createElement('div');
+            div.className = 'bingo-card';
+            div.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+
+            for (let i = 0; i < totalCells; i++) {
+                let isFree = (i === centerIdx);
+                let val;
+                let hitState = isFree;
+
+                if (initialCells && initialCells.length > i) {
+                    val = initialCells[i].val;
+                    hitState = initialCells[i].hit;
+                } else {
+                    if (isFree) {
+                        val = "FREE";
+                    } else {
+                        do {
+                            val = Math.floor(Math.random() * game.maxNum) + 1;
+                        } while (newCells.some(c => c.val === val));
+                    }
+                }
+
+                const cellDiv = document.createElement('div');
+                cellDiv.className = 'cell' + (hitState ? ' hit' : '') + (isFree ? ' free' : '');
+                cellDiv.innerText = val;
+
+                newCells.push({ val: val, hit: hitState, el: cellDiv });
+                div.appendChild(cellDiv);
+            }
+            return { cells: newCells, el: div, size: size };
+        }
+
+        function generateGrid(preserveState = false) {
+            if (!preserveState) {
+                game.drawn.clear();
+                game.history = [];
+                els.grid.innerHTML = '';
+                game.grids = [];
+                game.manualDrawCount = 0;
+            }
+
+            const targetCardCount = 1 + game.upg.cards;
+
+            if (game.grids.length < targetCardCount) {
+                for (let i = game.grids.length; i < targetCardCount; i++) {
+                    const newCard = createCardElement(game.gridSize);
+                    game.grids.push({
+                        cells: newCard.cells,
+                        bingos: 0,
+                        el: newCard.el,
+                        size: game.gridSize
+                    });
+                    els.grid.appendChild(newCard.el);
+                }
+            } else if (game.grids.length > targetCardCount) {
+                for (let i = game.grids.length - 1; i >= targetCardCount; i--) {
+                    els.grid.removeChild(game.grids[i].el);
+                }
+                game.grids.splice(targetCardCount);
+            }
+
+            if (preserveState && game.grids.length > 0) {
+                els.grid.innerHTML = '';
+                game.grids.forEach(g => {
+                    els.grid.appendChild(g.el);
+                    updateCardVisuals(g);
+                });
+            }
+        }
+
+        function drawBall() {
+            if (!game.allowDuplicates && game.drawn.size >= game.maxNum) {
+                els.ball.innerText = "FULL";
+                return;
+            }
+
+            let num;
+            if (game.allowDuplicates) {
+                num = Math.floor(Math.random() * game.maxNum) + 1;
+            } else {
+                do {
+                    num = Math.floor(Math.random() * game.maxNum) + 1;
+                } while (game.drawn.has(num));
+            }
+
+            game.drawn.add(num);
+            game.totalDrawCount += 1;
+            els.ball.innerText = num;
+
+            game.history.unshift(num);
+            if (game.history.length > 10) game.history.pop();
+
+            // Interference Logic
+            if (game.interference) {
+                game.interferenceCount++;
+                if (game.interferenceCount % 2 === 0) {
+                    const removeNum = Math.floor(Math.random() * game.maxNum) + 1;
+                    if (game.drawn.has(removeNum)) {
+                        game.drawn.delete(removeNum);
+                        const hIdx = game.history.indexOf(removeNum);
+                        if (hIdx !== -1) game.history.splice(hIdx, 1);
+
+                        // Unmark on grids
+                        game.grids.forEach(card => {
+                            card.cells.forEach(c => {
+                                if (c.val === removeNum && c.hit) {
+                                    c.hit = false;
+                                    c.el.classList.remove('hit');
+                                }
+                            });
+                            recalcBingos(card);
+                        });
+                    }
+                }
+            }
+
+            let totalHits = 0;
+
+            game.grids.forEach(card => {
+                let cardHit = false;
+                card.cells.forEach(c => {
+                    if (c.val === num) {
+                        c.hit = true;
+                        c.el.classList.add('hit');
+                        cardHit = true;
+                    }
+                });
+
+                if (cardHit) {
+                    totalHits++;
+                    checkWin(card);
+                }
+                updateCardVisuals(card);
+            });
+
+            if (totalHits > 0) {
+                const base = 1 + (game.upg.value * 0.5);
+                const entMult = 1 + (game.entropy * 0.1);
+                const reward = challengeRewardMult();
+
+                let gain = base * totalHits * entMult * reward;
+                game.bp += gain;
+            }
+
+            if (game.activeChallenge) {
+                const [id, level] = game.activeChallenge.split('-L');
+                const goal = CHALLENGES_META[id].levels.find(l => l.level == level).goal;
+                if (game.bp >= goal) {
+                    completeChallenge(id, level);
+                }
+            }
+        }
+
+        function updateCardVisuals(card) {
+            const size = card.size;
+            // Reset visuals
+            card.cells.forEach(c => {
+                c.el.classList.remove('bingo-completed');
+                c.el.classList.remove('reach');
+            });
+
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                const hitCount = line.filter(idx => card.cells[idx].hit).length;
+
+                // Bingo Completed
+                if (hitCount === size) {
+                    line.forEach(idx => card.cells[idx].el.classList.add('bingo-completed'));
+                }
+
+                // Reach
+                if (hitCount === size - 1) {
+                    const unhitIdx = line.find(idx => !card.cells[idx].hit);
+                    if (unhitIdx !== undefined) {
+                        card.cells[unhitIdx].el.classList.add('reach');
+                    }
+                }
+            });
+        }
+
+        function recalcBingos(card) {
+            const size = card.size;
+            let currentBingos = 0;
+
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                if (line.every(idx => card.cells[idx].hit)) {
+                    currentBingos++;
+                }
+            });
+
+            const diff = currentBingos - card.bingos;
+            if (diff !== 0) {
+                card.bingos = currentBingos;
+                game.totalBingos += diff;
+            }
+            updateCardVisuals(card);
+        }
+
+        function checkWin(card) {
+            const size = card.size;
+            let newBingos = 0;
+
+            const lines = [];
+            for (let r = 0; r < size; r++) lines.push([...Array(size)].map((_, c) => r * size + c));
+            for (let c = 0; c < size; c++) lines.push([...Array(size)].map((_, r) => r * size + c));
+            lines.push([...Array(size)].map((_, i) => i * size + i));
+            lines.push([...Array(size)].map((_, i) => i * size + (size - 1 - i)));
+
+            lines.forEach(line => {
+                if (line.every(idx => card.cells[idx].hit)) {
+                    newBingos++;
+                }
+            });
+
+            if (newBingos > card.bingos) {
+                const achieved = newBingos - card.bingos;
+                card.bingos = newBingos;
+                game.totalBingos += achieved;
+                log(`BINGO! Card achieved ${newBingos} lines.`);
+            }
+        }
+
+        function manualDraw() {
+            const n = game.manualDrawCount;
+            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
+            if (game.bp >= cost) {
+                game.bp -= cost;
+                game.manualDrawCount += 1;
+                drawBall();
+                game.drawTimer = 0;
+                updateManualDrawCost();
+                updateDisplay();
+                saveGame();
+            }
+        }
+
+        function updateManualDrawCost() {
+            const n = game.manualDrawCount;
+            const cost = CONFIG.manualDrawCostBase * (n + 1) * (n + 1);
+            els.manualDrawCost.innerText = format(cost);
+        }
+
         window.onload = init;
 
     </script>
