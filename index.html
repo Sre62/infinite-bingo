@@ -718,40 +718,42 @@
 
             generateGrid();
 
-            updateManualDrawCost();
-            updateSpeedDisplay(getDrawInterval());
+            game.entropy -= cost;
+            game.entropyUpgLevel++;
+            renderUI();
             updateDisplay();
+            saveGame();
         }
+
+
 
         function doPrestige() {
             if (game.bp < 1000000) return;
 
-            let baseGain = Math.floor(Math.pow(game.bp / 1000000, 0.5));
+            // Formula: (log10(BP) - 5) * (1 + completed_challenges_count)
+            let logBP = Math.log10(game.bp);
+            let baseGain = (logBP - 5);
+
             const totalLevels = Object.values(game.completedChallenges).reduce((a, b) => a + Number(b), 0);
             baseGain *= (1 + totalLevels);
+
+            // Apply other multipliers
             const c2Level = game.completedChallenges.c2 || 0;
-            if (c2Level >= 1) baseGain *= 1.1;
+            if (c2Level >= 1) baseGain *= 1.1; // Expansion Lv1 Reward
 
-            // Chaos removed, check Loop reward?
             const c4Level = game.completedChallenges.c4 || 0;
-            if (c4Level >= 1) baseGain *= 1.2; // Loop Lv1 Reward (Entropy +20%)
+            if (c4Level >= 1) baseGain *= 1.2; // Loop Lv1 Reward
 
-            const gain = Math.floor(baseGain);
+            const gain = Math.floor(Math.max(0, baseGain));
+
+            if (gain <= 0) {
+                alert("Not enough BP to gain Entropy yet.");
+                return;
+            }
 
             if (confirm(`Reset for ${gain} Entropy?`)) {
                 game.entropy += gain;
                 softReset();
-                saveGame();
-            }
-        }
-
-        function buyEntropyUpgrade() {
-            const cost = 1000000;
-            if (game.entropy >= cost) {
-                game.entropy -= cost;
-                game.entropyUpgLevel++;
-                renderUI();
-                updateDisplay();
                 saveGame();
             }
         }
@@ -1020,7 +1022,6 @@
                         } while (newCells.some(c => c.val === val));
                     }
                 }
-
                 const cellDiv = document.createElement('div');
                 cellDiv.className = 'cell' + (hitState ? ' hit' : '') + (isFree ? ' free' : '');
                 cellDiv.innerText = val;
@@ -1045,12 +1046,26 @@
             if (game.grids.length < targetCardCount) {
                 for (let i = game.grids.length; i < targetCardCount; i++) {
                     const newCard = createCardElement(game.gridSize);
-                    game.grids.push({
+
+                    // Retroactive History: Check if numbers are already drawn
+                    newCard.cells.forEach(c => {
+                        if (game.drawn.has(c.val)) {
+                            c.hit = true;
+                            c.el.classList.add('hit');
+                        }
+                    });
+
+                    const gridObj = {
                         cells: newCard.cells,
                         bingos: 0,
                         el: newCard.el,
                         size: game.gridSize
-                    });
+                    };
+
+                    // Recalculate bingos for the new card immediately
+                    recalcBingos(gridObj);
+
+                    game.grids.push(gridObj);
                     els.grid.appendChild(newCard.el);
                 }
             } else if (game.grids.length > targetCardCount) {
